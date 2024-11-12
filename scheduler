@@ -1,0 +1,166 @@
+#!/usr/bin/python3
+
+import argparse
+import time
+
+##########
+##CLASS###
+##########
+
+class Process:
+    def __init__(self, pid, arrival_time, burst_time):
+        self.pid = pid
+        self.arrival_time = arrival_time
+        self.burst_time = burst_time
+        self.initial_burst_time = burst_time  # Store the original burst time
+        self.completion_time = 0
+        self.waiting_time = 0
+        self.turnaround_time = 0
+        self.response_time = None  # Initialize response time as None
+        self.state = 'NEW' if burst_time > 0 else 'TERMINATED'
+
+##########
+#PRINTING#
+##########
+
+def print_processes(processes, job_queue, ready_queue):
+    print(f"{'PID':<5}{'Arrival':<10}{'Burst':<10}{'State':<12}")
+    print("-" * 37)  # Adding a separator line for clarity
+    for process in processes:
+        print(f"{process.pid:<5}{process.arrival_time:<10}{process.burst_time:<10}{process.state:<12}")
+
+    # Display Job Queue
+    print(f"\nJob Queue: {[process.pid for process in job_queue]}")
+    
+    # Display Ready Queue
+    print(f"Ready Queue: {[process.pid for process in ready_queue]}")
+    
+def print_results(processes):
+    print("\nFinal Results:")
+    calculate_throughput_and_cpu_utilization(processes)
+    print(f"{'PID':<5}{'Completion':<15}{'Turnaround':<15}{'Waiting':<10}{'Response':<12}")
+    print("-" * 60)  # Adding a separator line for clarity
+    for process in processes:
+        print(f"{process.pid:<5}{process.completion_time:<15}{process.turnaround_time:<15}{process.waiting_time:<10}{process.response_time:<12}")
+
+##########
+#SIMULATE#
+##########
+
+def simulate(processes, mode):
+    current_time = 1
+    job_queue = [process for process in processes if process.state == 'NEW']
+    ready_queue = []
+
+    while any(process.state != 'TERMINATED' for process in processes):
+        print(f"\nTime: {current_time}")
+
+        if mode == 1:
+            fifo_scheduler(processes, current_time, job_queue, ready_queue)
+            print_processes(processes, job_queue, ready_queue)
+            time.sleep(1)
+            current_time += 1
+
+##########
+###FIFO###
+##########
+
+def fifo_scheduler(processes, current_time, job_queue, ready_queue):
+    # Decrement arrival times for all processes still waiting to arrive
+    for process in processes:
+        if process.arrival_time != 0:
+            process.arrival_time -= 1
+
+    # Transition from NEW to READY
+    for process in job_queue[:]:  # Copy job_queue to avoid modifying it while iterating
+        if process.state == 'NEW' and process.arrival_time == 0:
+            process.state = 'READY'
+            ready_queue.append(process)
+            job_queue.remove(process)
+
+    # Handle RUNNING process
+    for process in processes:
+        if process.state == 'RUNNING':
+            # Reduce burst time of the currently running process
+            process.burst_time -= 1
+            # If the process finishes, set it to TERMINATED
+            if process.burst_time == 0:
+                process.state = 'TERMINATED'
+            return  # Only run one process at a time, so return after running one process
+
+    # Pick the next READY process to run if no process is currently running
+    for process in ready_queue:
+        if process.state == 'READY' and is_any_running(processes):
+            process.state = 'RUNNING'
+            ready_queue.remove(process)
+            if process.response_time is None:  # Set response time on first RUNNING state
+                process.response_time = current_time
+            return
+
+def is_any_running(processes):
+    for process in processes:
+        if process.state == 'RUNNING':
+            return 0
+    return 1
+
+
+def predict_fifo(processes):
+    current_time = 0
+    for process in processes:
+        if current_time < process.arrival_time:
+            current_time = process.arrival_time
+        process.waiting_time = current_time - process.arrival_time
+        process.completion_time = current_time + process.burst_time
+        process.turnaround_time = process.completion_time - process.arrival_time
+        current_time += process.burst_time
+
+def fifo(processes, mode):
+    time.sleep(1)
+    print("\n\033[1;36;40m███████╗ ██████╗███████╗███████╗\n██╔════╝██╔════╝██╔════╝██╔════╝\n█████╗  ██║     █████╗  ███████╗\n██╔══╝  ██║     ██╔══╝  ╚════██║\n██║     ╚██████╗██║     ███████║\n╚═╝      ╚═════╝╚═╝     ╚══════╝\033[0m")
+    predict_fifo(processes)
+    time.sleep(1)
+    print("Processes list:\nTime: 0")
+    print_processes(processes, [], [])
+    time.sleep(1)
+    # Run the simulation
+    simulate(processes, mode)
+
+##########################
+#THROUGHPUT & UTILIZATION#
+##########################
+
+def calculate_throughput_and_cpu_utilization(processes):
+    total_time = max(process.completion_time for process in processes)
+    completed_processes = len([process for process in processes if process.state == 'TERMINATED'])
+    throughput = completed_processes / total_time
+    cpu_busy_time = sum(process.initial_burst_time for process in processes)
+    cpu_utilization = (cpu_busy_time / total_time) * 100
+    print(f"\nThroughput: {throughput:.2f} processes/unit time")
+    print(f"CPU Utilization: {cpu_utilization:.2f}%")
+
+###########
+#INTERFACE#
+###########
+
+def main():
+    parser = argparse.ArgumentParser(description="CPU Scheduling Simulator")
+    parser.add_argument('--add', nargs='+', help="pid,arrival,burst (./fifo_scheduler.py --add 1,2,5 2,1,3)", required=True)
+    args = parser.parse_args()
+
+    processes = []
+    for process_input in args.add:
+        pid, arrival_time, burst_time = map(int, process_input.split(','))
+        processes.append(Process(pid, arrival_time, burst_time))
+
+    print("Choose Scheduling Mode:")
+    print("1: FIFO (First In, First Out)")
+    mode = int(input("Enter the mode number: "))
+    if mode == 1:
+        fifo(processes, mode)
+
+    print_results(processes)
+
+
+if __name__ == "__main__":
+    main()
+
